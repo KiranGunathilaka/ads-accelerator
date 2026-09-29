@@ -1,4 +1,8 @@
-"""Feasibility figure: cycles per block (from isa_sim.py), real-time budget, Zybo resources, verification."""
+"""Feasibility figures (cycle counts come from running the microprogram in isa_sim.py).
+
+slide_feasibility.png: slide version. Time budget, two resource gauges, three verification numbers.
+feasibility.png:       explainer version. Adds the per-phase cycle breakdown and the full resource table.
+"""
 import os
 import sys
 from diagram_kit import Canvas, NAVY, GREY, INK, INK2, ACCENT, FILL, KEY
@@ -20,8 +24,7 @@ def phase_cycles():
     return total, cl.phase_cycles
 
 
-def draw(path):
-    total, ph = phase_cycles()
+def draw_detail(path, total, ph):
     fclk = 100e6
     t_us = total / fclk * 1e6
     period_us = 128 / 48000 * 1e6
@@ -91,6 +94,54 @@ def draw(path):
     return total, ph, t_us
 
 
+def draw_slide(path, total):
+    fclk = 100e6
+    t_us = total / fclk * 1e6
+    period_us = 128 / 48000 * 1e6
+    c = Canvas(1800, 700)
+
+    # ---------------- time budget
+    c.text(30, 30, f"Time per block:  {t_us:.0f} µs needed,  {period_us:,.0f} µs available", fs=16, color=NAVY,
+           bold=True, ha="left")
+    W = 1740
+    c.rect(30, 62, W, 50, fc="white", ec=GREY, lw=1.3)
+    c.text(46, 87, f"available: {period_us:,.0f} µs  (a new block of 128 samples arrives every 2.67 ms at 48 kHz)",
+           fs=13, color=INK2, ha="left")
+    c.rect(30, 126, W * t_us / period_us, 50, fc=BLUE, ec=BLUE, lw=0)
+    c.text(30 + W * t_us / period_us + 14, 151, f"accelerator: {t_us:.0f} µs  ({total:,} clock cycles at 100 MHz)",
+           fs=13, color=INK, ha="left")
+    c.box(1180, 126, 590, 50, f"busy {t_us / period_us * 100:.0f} % of the time  →  ~{period_us / t_us:.0f}× headroom",
+          kind="accent", fs=14, radius=6)
+
+    # ---------------- resources
+    c.text(30, 236, "Fits the smaller Zybo board (Z7-10)", fs=16, color=NAVY, bold=True, ha="left")
+    gauges = [("DSP48E1 multiplier blocks", 51, 80, "3 PEs × 16 lanes + 3 scalar"),
+              ("BRAM18 memory blocks", 49, 120, "3 PEs × 16 banks + instruction memory")]
+    for i, (name, used, have, why) in enumerate(gauges):
+        y = 270 + i * 74
+        c.text(30, y + 22, name, fs=13.5, color=INK, ha="left", bold=True)
+        c.rect(380, y, 900, 44, fc="#f3f4f6", ec=GREY, lw=1.0)
+        c.rect(380, y, 900 * used / have, 44, fc=KEY, ec=NAVY, lw=1.2)
+        c.text(392, y + 22, f"{used} of {have}  ({used / have * 100:.0f} %)", fs=13, color=NAVY, ha="left", bold=True)
+        c.text(1300, y + 22, why, fs=12, color=INK2, ha="left")
+    c.text(30, 440, "On the Z7-20: 23 % and 18 %.  Logic (LUTs) and the real clock limit come from synthesis, "
+           "the next step.", fs=12.5, color=INK2, ha="left")
+
+    # ---------------- verification
+    c.text(30, 510, "Checked in simulation", fs=16, color=NAVY, bold=True, ha="left")
+    ver = [("600 / 600", "blocks where the ISA program gives\nexactly the fixed-point model's result"),
+           ("99.6 %", "blocks where fixed-point gives the\nsame delay as floating-point"),
+           ("85.6 %", "blocks within ±1 sample of the true\ndelay (moving source, 127 s of audio)")]
+    for i, (big, small) in enumerate(ver):
+        xx = 30 + i * 584
+        c.box(xx, 540, 564, 130, "", kind="white", lw=1.2)
+        c.text(xx + 24, 590, big, fs=26, color=NAVY, bold=True, ha="left")
+        c.text(xx + 24, 640, small, fs=12, color=INK2, ha="left", va="center", linespacing=1.35)
+    c.save(path)
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    print(draw(os.path.join(OUT, "feasibility.png")))
+    total, ph = phase_cycles()
+    draw_slide(os.path.join(OUT, "slide_feasibility.png"), total)
+    print(draw_detail(os.path.join(OUT, "feasibility.png"), total, ph))

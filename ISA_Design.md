@@ -577,7 +577,7 @@ The IRQ is level-triggered and stays high until the ARM clears `STATUS.DONE`. Th
 
 ## 13. Microarchitecture
 
-Diagram: `presentation/figures/microarch.png` (source `presentation/draw_microarch.py`).
+Diagrams: `presentation/figures/microarch.png` (full detail) and `slide_microarch.png` (slide version), both from `presentation/draw_microarch.py`; the PE datapath (registers, muxes, DSP48E1 lanes, adder tree, with the control unit's fetch path and AGU) is `presentation/figures/pe_datapath.png` from `presentation/draw_datapath.py`.
 
 ### 13.1 System (Zynq-7000)
 

@@ -122,23 +122,23 @@ def slide(r):
             ax.set_ylabel("delay (samples)")
             h, lab = ax.get_legend_handles_labels()
     fig.legend(h[::-1], lab[::-1], loc="upper right", ncol=2, frameon=False, fontsize=13, bbox_to_anchor=(0.99, 1.0))
-    fig.text(0.01, 0.985, "Source moving on a 2 m circle · 4-mic tetrahedron · 48 kHz · B = 128, L = 64", fontsize=13,
+    fig.text(0.01, 0.985, "Sound source moving around the 4 microphones · 127 s of music", fontsize=13,
              color=INK2, va="top")
 
     ax = fig.add_subplot(gs[1, 0:3])
     skip = int(0.5 * 48000 / 128)
-    rows = [("float  μ=0.05 (v1.0)", r["est_float"], MUTED), ("fixed, 16-bit w  μ=0.05", r["est_fx16"], MUTED),
-            ("fixed, 32-bit w  μ=0.05", r["est_fx32"], BLUE), ("float  μ=0.5", r["est_float_fast"], MUTED),
-            ("fixed, 32-bit w  μ=0.5", r["est_fx32_fast"], BLUE)]
+    rows = [("floating-point,  μ = 0.5", r["est_float_fast"], MUTED),
+            ("fixed-point,  μ = 0.5", r["est_fx32_fast"], BLUE),
+            ("fixed-point,  μ = 0.05", r["est_fx32"], BLUE)]
     vals = [np.mean(np.abs(e[skip:] - np.round(true[skip:])) <= 1) * 100 for _, e, _ in rows]
     y = np.arange(len(rows))[::-1]
-    ax.barh(y, vals, color=[c for *_, c in rows], height=0.62)
+    ax.barh(y, vals, color=[c for *_, c in rows], height=0.55)
     ax.set_axisbelow(True)
     for yi, v in zip(y, vals):
         ax.text(v + 1.2, yi, f"{v:.1f}%", va="center", color=INK, fontsize=13)
-    ax.set_yticks(y, [n for n, *_ in rows]); ax.set_xlim(0, 100); ax.grid(axis="y", visible=False)
-    ax.set_xlabel("blocks within ±1 sample of true delay (%)")
-    ax.set_title("Accuracy: fixed-point = float; μ sets tracking lag", loc="left", fontsize=14, color=INK,
+    ax.set_yticks(y, [n for n, *_ in rows], fontsize=13); ax.set_xlim(0, 100); ax.grid(axis="y", visible=False)
+    ax.set_xlabel("blocks within ±1 sample of the true delay (%)")
+    ax.set_title("Fixed-point = floating-point;  larger μ tracks faster", loc="left", fontsize=14, color=INK,
                  fontweight="bold")
 
     ax = fig.add_subplot(gs[1, 3:6])

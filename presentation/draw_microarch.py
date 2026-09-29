@@ -1,4 +1,8 @@
-"""Microarchitecture diagram: Zynq system context + SIMD cluster + one PE in detail."""
+"""Microarchitecture diagrams.
+
+slide_microarch.png: slide version. Hardware blocks only: Zynq PS, DMA, control unit, 3 PEs.
+microarch.png:       explainer version. Every port, CSR and the inside of PE0 in detail.
+"""
 import os
 from diagram_kit import Canvas, NAVY, GREY, INK2, ACCENT, FILL, KEY
 
@@ -6,7 +10,7 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "figures")
 ACC_TXT = "#9a3412"
 
 
-def draw(path):
+def draw_detail(path):
     c = Canvas(1800, 930)
 
     # ---------------- Zynq PS
@@ -133,7 +137,99 @@ def draw(path):
     c.save(path)
 
 
+def pe_column(c, px, py, name, pair):
+    """One PE as a stack of hardware blocks. Data enters at the bottom (memory) and flows up."""
+    W, x0, iw = 394, px + 14, 366
+    c.box(px, py, W, 398, "", "", kind="white", lw=1.8, z=2)
+    c.text(x0, py + 20, name, fs=15, color=NAVY, bold=True, ha="left")
+    c.text(px + W - 14, py + 20, pair, fs=11, color=INK2, ha="right")
+
+    # top row: ALUs and peak detector
+    bw = (iw - 20) / 3
+    for i, t in enumerate(["Vector ALU", "Scalar unit", "Peak detect"]):
+        c.box(x0 + i * (bw + 10), py + 42, bw, 50, t, kind="ours", fs=11, radius=4)
+    # adder tree (wide side = 16 inputs at the bottom)
+    c.trap(x0 + 20, py + 110, iw - 40, 46, "Adder tree  16 → 1", up=True, fs=12, inset=0.3)
+    # 16 MAC lanes
+    c.box(x0, py + 174, iw, 76, "16 MAC lanes  (DSP48E1)", kind="key", title_top=True, fs=12, radius=4)
+    cw = (iw - 24) / 16
+    for i in range(16):
+        c.rect(x0 + 12 + i * cw + 1, py + 208, cw - 3, 32, fc="white", ec=NAVY, lw=0.9, z=4)
+        c.text(x0 + 12 + i * cw + cw / 2 - 0.5, py + 224, "×", fs=10.5, color=NAVY, bold=True)
+    # window register + vector registers
+    hw = (iw - 10) / 2
+    c.box(x0, py + 268, hw, 48, "Window register", kind="accent", fs=11.5, radius=4)
+    c.box(x0 + hw + 10, py + 268, hw, 48, "Vector registers", kind="ours", fs=11.5, radius=4)
+    # local memory: 16 banks
+    c.box(x0, py + 334, iw, 56, "Local memory  ·  16 banks", kind="ours", title_top=True, fs=11.5, radius=4)
+    for i in range(16):
+        c.rect(x0 + 12 + i * cw + 1, py + 360, cw - 3, 22, fc="white", ec=NAVY, lw=0.8, z=4)
+
+    # data flows upwards
+    for x in (x0 + hw / 2, x0 + hw + 10 + hw / 2):
+        c.arrow([(x, py + 334), (x, py + 316)], lw=1.5)
+        c.arrow([(x, py + 268), (x, py + 250)], lw=1.5)
+    c.arrow([(x0 + iw / 2, py + 174), (x0 + iw / 2, py + 156)], lw=1.5)
+    c.arrow([(x0 + iw / 2, py + 110), (x0 + iw / 2, py + 92)], lw=1.5)
+
+
+def draw_slide(path):
+    c = Canvas(1800, 840)
+
+    # ---------------- Zynq PS (ARM side)
+    c.box(12, 12, 250, 816, "Zynq PS  (ARM)", kind="container", title_top=True, fs=14, dashed=True)
+    c.box(28, 96, 218, 132, "ARM Cortex-A9", "runs our C driver", kind="ext", fs=14.5, sub_fs=11.5)
+    c.box(28, 716, 218, 96, "DDR memory", "audio from 4 mics", kind="ext", fs=14.5, sub_fs=11.5)
+
+    # ---------------- Zynq PL (FPGA fabric)
+    c.box(276, 12, 1512, 816, "Zynq PL  (FPGA fabric)", kind="container", title_top=True, fs=14, dashed=True)
+    c.box(292, 716, 150, 96, "AXI DMA", "standard IP", kind="ext", fs=14.5, sub_fs=11.5)
+    c.box(500, 48, 1276, 766, "", kind="white", lw=1.4, z=2)
+    c.text(1138, 66, "SIMD accelerator  —  our Verilog", fs=14, color=NAVY, bold=True)
+
+    c.box(520, 96, 220, 132, "Control registers", "μ, B, L in\nτ21, τ31, τ41 out", kind="ours", fs=13.5,
+          sub_fs=11.5)
+    c.box(760, 88, 996, 148, "Control unit  —  one copy, shared by all PEs", kind="key", title_top=True, fs=13.5)
+    subs = ["Instruction\nmemory", "Fetch +\nloop counter", "Decode", "Address\ngenerator"]
+    for i, t in enumerate(subs):
+        x = 776 + i * 244
+        c.box(x, 136, 228, 80, t, kind="white", fs=13, radius=4)
+        if i < 3:
+            c.arrow([(x + 228, 176), (x + 244, 176)], lw=1.5)
+    c.arrow([(740, 162), (760, 162)], lw=1.5)
+
+    # broadcast bar
+    c.rect(520, 256, 1236, 38, fc=KEY, ec=NAVY, lw=1.3)
+    c.text(1138, 275, "every cycle the same instruction + address go to all 3 PEs   →   3 × 16 lanes = 48 MACs per "
+           "instruction", fs=12.5, color=NAVY, bold=True)
+    c.arrow([(1258, 236), (1258, 256)], lw=1.8)
+
+    # three identical PEs
+    pes = [("PE0", "Mic 2 vs Mic 1"), ("PE1", "Mic 3 vs Mic 1"), ("PE2", "Mic 4 vs Mic 1")]
+    for i, (n, pair) in enumerate(pes):
+        px = 520 + i * 421
+        pe_column(c, px, 314, n, pair)
+        c.arrow([(px + 197, 294), (px + 197, 314)], lw=1.8)
+        c.arrow([(px + 197, 736), (px + 197, 712)], lw=1.8, color=GREY)
+
+    # input writer + links
+    c.box(520, 736, 1236, 56, "Input writer  —  audio samples → PE memories", kind="ours", fs=13, radius=4)
+    c.arrow([(246, 764), (292, 764)], color=GREY)
+    c.arrow([(442, 764), (520, 764)], "AXI4-\nStream", label_off=(0, -28), color=GREY, fs=10.5)
+    c.arrow([(246, 140), (520, 140)], "AXI4-Lite:  settings in, τ out", both=True, label_off=(0, -14), fs=11.5)
+    c.arrow([(520, 196), (246, 196)], "interrupt:  τ ready", color=ACCENT, label_off=(0, -14), fs=11.5,
+            label_color=ACC_TXT)
+
+    # legend
+    for i, (kind, t) in enumerate([("ours", "our Verilog"), ("ext", "ARM side /\nstandard IP"),
+                                   ("accent", "sliding-window\n(memory addressing)")]):
+        c.box(36, 420 + i * 62, 26, 20, "", kind=kind, radius=3)
+        c.text(72, 430 + i * 62, t, fs=11, ha="left", va="top" if "\n" in t else "center")
+    c.save(path)
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    draw(os.path.join(OUT, "microarch.png"))
+    draw_slide(os.path.join(OUT, "slide_microarch.png"))
+    draw_detail(os.path.join(OUT, "microarch.png"))
     print("ok")

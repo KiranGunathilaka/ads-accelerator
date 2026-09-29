@@ -1,4 +1,8 @@
-"""Memory & addressing figure: sliding window + reversed w, circular input ring, bank alignment, memory map."""
+"""Memory & addressing figures.
+
+slide_memory.png: slide version. Sliding window, circular ring, aligned banks, drawn as pictures.
+memory.png:       explainer version. Adds the reversed-w equations, sizes and the per-PE memory map.
+"""
 import os
 import numpy as np
 from matplotlib.patches import Wedge
@@ -9,7 +13,26 @@ ACC_TXT = "#9a3412"
 PALE_ACC = "#fdeee7"
 
 
-def draw(path):
+def ring(c, cx, cy, R, rw, fs=10):
+    """512-word ring: block being processed (0-191), block the DMA is filling (191-319), free."""
+    def arc(a0, a1, fc, ec):
+        # word offset -> clockwise angle from 12 o'clock; the canvas y axis points down
+        t0, t1 = a0 / 512 * 360 - 90, a1 / 512 * 360 - 90
+        c.ax.add_patch(Wedge((cx, cy), R, t0, t1, width=rw, fc=fc, ec=ec, lw=1.4, zorder=3,
+                             transform=c.ax.transData))
+    arc(0, 191, KEY, NAVY)
+    arc(191, 319, PALE_ACC, ACCENT)
+    arc(319, 512, "#f3f4f6", GREY)
+    for k in range(4):
+        ang = np.deg2rad(90 - k * 90)
+        c.ax.plot([cx + (R - rw) * np.cos(ang), cx + R * np.cos(ang)],
+                  [cy - (R - rw) * np.sin(ang), cy - R * np.sin(ang)], color="white", lw=2, zorder=4)
+    for off in (0, 128, 256, 384):
+        phi = np.deg2rad(off / 512 * 360)
+        c.text(cx + (R + 24) * np.sin(phi), cy - (R + 24) * np.cos(phi), str(off), fs=fs, color=INK2)
+
+
+def draw_detail(path):
     c = Canvas(1800, 900)
 
     # ================= (A) one window serves rows and columns
@@ -41,24 +64,7 @@ def draw(path):
     # ================= (B) circular input ring
     cx, cy, R, rw = 1450, 272, 162, 48
     c.text(1150, 30, "② Circular X / D rings — no copies", fs=15, color=NAVY, bold=True, ha="left")
-
-    def arc(a0, a1, fc, ec):
-        # word offset -> clockwise angle from 12 o'clock on screen; the canvas y axis points down,
-        # so a screen angle phi corresponds to data angle phi - 90
-        t0, t1 = a0 / 512 * 360 - 90, a1 / 512 * 360 - 90
-        c.ax.add_patch(Wedge((cx, cy), R, t0, t1, width=rw, fc=fc, ec=ec, lw=1.4, zorder=3,
-                             transform=c.ax.transData))
-    # y axis is inverted in canvas coordinates, so mirror angles by drawing with negative sense
-    arc(0, 191, KEY, NAVY)
-    arc(191, 319, PALE_ACC, ACCENT)
-    arc(319, 512, "#f3f4f6", GREY)
-    for k in range(4):
-        ang = np.deg2rad(90 - k * 90)
-        c.ax.plot([cx + (R - rw) * np.cos(ang), cx + R * np.cos(ang)],
-                  [cy - (R - rw) * np.sin(ang), cy - R * np.sin(ang)], color="white", lw=2, zorder=4)
-    for off in (0, 128, 256, 384):
-        phi = np.deg2rad(off / 512 * 360)
-        c.text(cx + (R + 24) * np.sin(phi), cy - (R + 24) * np.cos(phi), str(off), fs=10, color=INK2)
+    ring(c, cx, cy, R, rw)
     c.text(cx + 16, cy - R - 24, "← A7 (base of block n)", fs=10.5, color=NAVY, ha="left", bold=True)
     c.text(cx, cy - 16, "X ring", fs=13, color=NAVY, bold=True)
     c.text(cx, cy + 8, "512 words", fs=11, color=INK2)
@@ -118,7 +124,72 @@ def draw(path):
     c.save(path)
 
 
+def draw_slide(path):
+    c = Canvas(1800, 750)
+
+    # ================= (1) sliding window
+    c.text(30, 30, "① Sliding window: the next row costs one memory read", fs=16, color=NAVY, bold=True, ha="left")
+    x0, cw, n = 250, 35, 24
+
+    def cells(y, lo, hi, fc, ec, tc, new=None, gone=None):
+        for j in range(lo, hi + 1):
+            f, e, t = fc, ec, tc
+            if j == new:
+                f, e, t = ACCENT, ACCENT, "white"
+            if j == gone:
+                f, e, t = "white", "#d1d5db", "#b8bcc6"
+            c.rect(x0 + (j - 1) * cw, y, cw - 4, 36, fc=f, ec=e, lw=1.2)
+            c.text(x0 + (j - 1) * cw + cw / 2 - 2, y + 18, str(j), fs=10.5, color=t, bold=(j == new))
+
+    c.text(30, 98, "samples in memory", fs=12.5, color=INK2, ha="left")
+    cells(80, 1, n, "white", GREY, INK2)
+    c.text(30, 168, "window, row i", fs=12.5, color=ACC_TXT, ha="left", bold=True)
+    cells(150, 1, 16, PALE_ACC, ACCENT, ACC_TXT)
+    c.text(30, 238, "window, row i + 1", fs=12.5, color=ACC_TXT, ha="left", bold=True)
+    cells(220, 1, 17, PALE_ACC, ACCENT, ACC_TXT, new=17, gone=1)
+    xn = x0 + 16 * cw + cw / 2 - 2
+    c.arrow([(xn, 116), (xn, 220)], color=ACCENT, lw=2)
+    c.text(xn + 14, 186, "1 new sample", fs=12, color=ACC_TXT, ha="left", bold=True)
+    c.text(x0 + cw / 2 - 2, 276, "dropped", fs=11, color=INK2)
+    c.text(30, 322, "Fill the window once, then shift it one sample per row: 1 read per row, not a full reload.", fs=12.5, color=INK, ha="left")
+    c.text(30, 354, "The real window is 64 samples. Weights are stored reversed, so y = Xw and g = Xᵀe share it.", fs=12.5, color=INK2, ha="left")
+
+    # ================= (2) circular ring
+    cx, cy, R, rw = 1470, 250, 170, 52
+    c.text(1150, 30, "② Ring buffer: nothing is copied", fs=16, color=NAVY, bold=True, ha="left")
+    ring(c, cx, cy, R, rw, fs=11)
+    c.text(cx, cy - 10, "512 words", fs=14, color=NAVY, bold=True)
+    c.text(cx, cy + 16, "per mic", fs=12, color=INK2)
+    leg = [(KEY, NAVY, "block being processed now"), (PALE_ACC, ACCENT, "DMA writes the next block"),
+           ("#f3f4f6", GREY, "free")]
+    for i, (fc, ec, t) in enumerate(leg):
+        c.rect(1210, 480 + i * 34, 24, 18, fc=fc, ec=ec, lw=1.2)
+        c.text(1246, 489 + i * 34, t, fs=12.5, color=INK2, ha="left")
+    c.text(1210, 600, "Old samples the next block still needs\nstay where they are. Processing and\n"
+           "loading overlap.", fs=12.5, color=INK, ha="left", va="top", linespacing=1.45)
+
+    # ================= (3) banks
+    c.text(30, 440, "③ 16 banks: every vector load is one aligned row", fs=16, color=NAVY, bold=True, ha="left")
+    bx, by, bw = 150, 480, 58
+    for b in range(16):
+        c.text(bx + b * bw + bw / 2 - 2, by, f"{b}", fs=11, color=INK2)
+    c.text(bx - 16, by, "bank", fs=11, color=INK2, ha="right")
+    rows = [(["…"] * 16, False), ([f"{j}" for j in range(1, 17)], True), ([f"{j}" for j in range(17, 33)], False)]
+    for ri, (labs, hi) in enumerate(rows):
+        yy = by + 16 + ri * 44
+        for b, lab in enumerate(labs):
+            c.rect(bx + b * bw, yy, bw - 4, 38, fc=PALE_ACC if hi else "white", ec=ACCENT if hi else GREY,
+                   lw=1.3 if hi else 0.9)
+            c.text(bx + b * bw + bw / 2 - 2, yy + 19, lab, fs=11, color=ACC_TXT if hi else INK2, bold=hi)
+    c.text(bx - 16, by + 16 + 44 + 19, "one load", fs=11.5, color=ACC_TXT, ha="right", bold=True)
+    c.text(30, 680, "All 16 banks answer in the same cycle, each with one sample.  Because loads never start "
+           "mid-row,\nno crossbar or rotator is needed: the memory stays simple and small.", fs=12.5, color=INK,
+           ha="left", va="top", linespacing=1.45)
+    c.save(path)
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    draw(os.path.join(OUT, "memory.png"))
+    draw_slide(os.path.join(OUT, "slide_memory.png"))
+    draw_detail(os.path.join(OUT, "memory.png"))
     print("ok")
